@@ -2,7 +2,7 @@ from typing import List
 from operator import add
 from functools import reduce
 
-from op import Placeholder, OnesLikeOp
+from node import Placeholder, OnesLikeOp
 
 def sum_nodes(nodes):
     return reduce(add, nodes)
