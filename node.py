@@ -1,5 +1,9 @@
 from typing import List
 import numpy as np
+import tvm_op
+import topi
+
+from utils import broadcast_rule
 
 class Node:
    
@@ -41,6 +45,12 @@ class BaseOp:
     def gradient(self, node, grad):
         pass
     
+    def infer_shape(self, node, shapes):
+        pass
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        pass
+    
     def __call__(self):
         node = Node()
         node.op = self
@@ -60,6 +70,11 @@ class Add(BaseOp):
     def gradient(self, node: Node, grad):
         return [grad, grad] # Contribution of each value to the gradient
     
+    def infer_shape(self, node, shape):
+        return broadcast_rule(shape[0], shape[1])
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.element_wise_addition(shapes[0], tgt, tgt_host, "element_wise_addition")
 
 class AddConst(BaseOp):
     
