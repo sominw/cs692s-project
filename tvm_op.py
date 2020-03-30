@@ -23,7 +23,6 @@ def element_wise_addition_by_const(shape, const_k, func_name, dtype="float32", t
     return f
 
 def element_wise_mul(shape, func_name, dtype="float32", tgt="llvm", tgt_host="llvm"):
-    """TODO: Your code here"""
     A = tvm.te.placeholder(shape, dtype=dtype, name="A")
     B = tvm.te.placeholder(shape, dtype=dtype, name="B")
     C = tvm.te.compute(A.shape, lambda *i: A(*i) * B(*i))

@@ -1,7 +1,6 @@
 import numpy as np
 
-from node import Node
-from node import Placeholder
+from node import Node, Placeholder
 from utils import topological_sort_lookup
 
 class Executor:

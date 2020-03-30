@@ -9,9 +9,8 @@ def sum_nodes(nodes):
 
 def var(desc):
     pn = Placeholder()
-    pn_node = pn()
-    pn_node.desc = desc
-    return pn_node
+    pn.desc = desc
+    return pn
 
 def topological_sort(node, visited, order):
     if node in visited:
