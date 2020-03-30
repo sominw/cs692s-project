@@ -9,8 +9,9 @@ def sum_nodes(nodes):
 
 def var(desc):
     pn = Placeholder()
-    pn.desc = desc
-    return pn
+    pn_node = pn()
+    pn_node.desc = desc
+    return pn_node
 
 def topological_sort(node, visited, order):
     if node in visited:
@@ -26,6 +27,26 @@ def topological_sort_lookup(nodes):
     for node in nodes:
         topological_sort(node, visited, order)
     return order
+
+"""
+def gradients(output_node, node_list):
+    node_to_output_grads_list = {}
+    temp = OnesLikeOp()
+    node_to_output_grads_list[output_node] = [temp(output_node)]
+    node_to_output_grad = {}
+    reverse_topo_order = reversed(topological_sort_lookup([output_node]))
+
+    for node in reverse_topo_order:
+        grad = sum_nodes(node_to_output_grads_list[node])
+        node_to_output_grad[node] = grad
+        input_grads = node.op.gradient(node, grad)
+        for i in range(len(node.inputs)):
+            node_to_output_grads_list[node.inputs[i]] = node_to_output_grads_list.get(node.inputs[i], [])
+            node_to_output_grads_list[node.inputs[i]].append(input_grads[i])
+
+    grad_node_list = [node_to_output_grad[node] for node in node_list]
+    return grad_node_list
+"""
 
 def gradients(node, node_list):
     node_to_grad = dict()

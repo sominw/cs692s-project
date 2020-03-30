@@ -7,7 +7,7 @@ class Node:
         self.op = None
         self.const_attribute = None
         self.desc = ""
-        self.inputs = list()
+        self.inputs = []
         
     def __add__(self, input):
         if isinstance(input, Node):
