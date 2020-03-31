@@ -7,7 +7,6 @@ from __future__ import print_function, absolute_import
 def reduce_sum_axis_zero(shape, func_name, dtype="float32", tgt="llvm", tgt_host="llvm"):
     A = tvm.te.placeholder(shape, dtype=dtype, name="A")
     C = topi.sum(A, axis=0, keepdims=False)
-
     s = tvm.te.create_schedule(C.op)
     f = tvm.build(s, [A, C], tgt, target_host=tgt_host, name=func_name)
     return f
@@ -16,7 +15,6 @@ def sgd_update(shape, learning_rate, func_name, dtype="float32", tgt="llvm", tgt
     X = tvm.te.placeholder(shape, dtype=dtype, name="A")
     grad = tvm.te.placeholder(shape, dtype=dtype, name="grad")
     Y = tvm.te.compute(shape, lambda *i: X(*i) - learning_rate * grad(*i))
-
     s = tvm.te.create_schedule(Y.op)
     f = tvm.build(s, [X, grad, Y], tgt, target_host=tgt_host, name=func_name)
     return f
@@ -24,7 +22,6 @@ def sgd_update(shape, learning_rate, func_name, dtype="float32", tgt="llvm", tgt
 def broadcast_to(shape, to_shape, func_name, dtype="float32", tgt="llvm", tgt_host="llvm"):
     A = tvm.te.placeholder(shape, dtype=dtype, name="A")
     C = topi.broadcast_to(A, to_shape)
-
     s = tvm.te.create_schedule(C.op)
     f = tvm.build(s, [A, C], tgt, target_host=tgt_host, name=func_name)
     return f
@@ -138,17 +135,15 @@ def matrix_cross_entropy(shape, func_name, dtype="float32", tgt="llvm", tgt_host
     B = tvm.te.placeholder(shape, dtype=dtype, name="B")
     k = tvm.te.reduce_axis((0, shape[1]), name="k")
     max_A = tvm.te.compute((shape[0],), lambda i: tvm.tir.max(A[i, k], axis=k), name="max_A")
-    exp = tvm.te.compute(shape, lambda i, j: tvm.exp(A[i, j] - max_A[i]), name="exp")
+    exp = tvm.te.compute(shape, lambda i, j: tvm.tir.exp(A[i, j] - max_A[i]), name="exp")
     k1 = tvm.te.reduce_axis((0, shape[1]), name="k1")
     sum_exp = tvm.te.compute((shape[0],), lambda i: tvm.tir.sum(exp[i, k1], axis=k1), name="sum_exp")
     softmax = tvm.te.compute(shape, lambda i, j: exp[i, j] / sum_exp[i], name="softmax")
-
-    log = tvm.te.compute(shape, lambda i, j: tvm.log(softmax[i, j]), name = "log")
+    log = tvm.te.compute(shape, lambda i, j: tvm.tir.log(softmax[i, j]), name = "log")
     k2 = tvm.te.reduce_axis((0, shape[1]), name="k2")
     sum_softmax = tvm.te.compute((shape[0],), lambda i: tvm.tir.sum(B[i, k2] * log[i, k2], axis = k2), name="sum_softmax")
     k3 = tvm.te.reduce_axis((0, shape[0]), name="k3")
     softmax_cross_entropy = tvm.te.compute((1,), lambda i: tvm.tir.sum(-1 * sum_softmax[k3] / shape[0], axis = k3))
-
     s = tvm.te.create_schedule(softmax_cross_entropy.op)
     f = tvm.build(s, [A, B, softmax_cross_entropy], tgt, target_host=tgt_host, name=func_name)
     return f

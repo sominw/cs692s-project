@@ -39,7 +39,7 @@ class Node:
 
 class BaseOp:
     
-    def compute(self, node, vals):
+    def compute(self, node, vals, output, compiled_func):
         pass
 
     def gradient(self, node, grad):
@@ -64,17 +64,17 @@ class Add(BaseOp):
         node.inputs = [node1, node2]
         return node
     
-    def compute(self, node: Node, vals):
-        return vals[0] + vals[1]
+    def compute(self, node, vals, output, compiled_func):
+        compiled_func(vals[0], vals[1], output)
     
-    def gradient(self, node: Node, grad):
+    def gradient(self, node, grad):
         return [grad, grad] # Contribution of each value to the gradient
     
     def infer_shape(self, node, shape):
         return broadcast_rule(shape[0], shape[1])
     
     def compiled_func(self, node, shapes, tgt, tgt_host):
-        return tvm_op.element_wise_addition(shapes[0], tgt, tgt_host, "element_wise_addition")
+        return tvm_op.element_wise_addition(shapes[0], "element_wise_addn")
 
 class AddConst(BaseOp):
     
@@ -86,12 +86,18 @@ class AddConst(BaseOp):
         
         return node
     
-    def compute(self, node, val):
-        return val[0] + node.const_attribute
+    def compute(self, node, vals, output, compiled_func):
+        compiled_func(vals[0], output)
     
     def gradient(self, node, grad):
         return [grad]
     
+    def infer_shape(self, node, shape):
+        const = (1,)
+        return broadcast_rule(shape[0], const)
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.element_wise_addition_by_const(shapes[0], node.const_attribute, "elemwise_add_const")
 
 class Multiply(BaseOp):
     
@@ -101,14 +107,18 @@ class Multiply(BaseOp):
         node.inputs = [node1, node2]
         return node
     
-    def compute(self, node, val):
-        return val[0] * val[1]
+    def compute(self, node, vals, output, compiled_func):
+        compiled_func(vals[0], vals[1], output)
     
     def gradient(self, node, grad):
-        mul = Multiply()
-#        res = [Multiply(node.inputs[1], grad), Multiply(node.inputs[0], grad)]
-        res = [mul(node.inputs[1], grad), mul(node.inputs[0], grad)]
-        return res
+        return [node.inputs[1] * grad, node.inputs[0] * grad]
+    
+    def infer_shape(self, node, shape):
+        return broadcast_rule(shape[0], shape[1])
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.element_wise_mul(shapes[0], "element_wise_multiplication")
+ 
         
 class MultiplyByConst(BaseOp):
     def __call__(self, node1, val):
@@ -118,22 +128,36 @@ class MultiplyByConst(BaseOp):
         node.desc = "(%s + %s)" % (node1.desc, str(val))
         return node
     
-    def compute(self, node, val):
-        return val[0] * node.const_attribute
+    def compute(self, node, vals, output, compiled_func):
+        compiled_func(vals[0], output) 
     
     def gradient(self, node, grad):
-        mulc = MultiplyByConst()
-        res = [mulc(grad, node.const_attribute)]
-        return res
+        return [node.const_attribute * grad]
+    
+    def infer_shape(self, node, shape):
+        c_shape = (1,)
+        return broadcast_rule(shape[0], c_shape)
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.element_wise_mul_by_const(shapes[0], node.const_attribute, "element_wise_multiplication_byconst")
     
 class Placeholder(BaseOp):
     def __call__(self):
         node = BaseOp.__call__(self)
         return node
-    def compute(self, node, val):
+    
+    def compute(self, node, vals, output, compiled_func):
         pass
+    
     def gradient(self, node, grad):
         return None
+
+    def infer_shape(self, node, shape):
+        pass
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return None
+
 
 class ZerosLike(BaseOp):
     def __call__(self, node1):
@@ -142,13 +166,19 @@ class ZerosLike(BaseOp):
         node.desc = "zeros like shape of (%s)" % node1.desc
         return node
     
-    def compute(self, node, val):
-        return np.zeros(val[0].shape)
+    def compute(self, node, vals, output, compiled_func):
+        output.copyfrom(np.zeros(vals[0].shape, dtype = vals[0].dtype))
     
     def gradient(self, node, grad):
         temp = ZerosLike()
         return [temp(node.inputs[0])]
+
+    def infer_shape(self, node, shape):
+        return shape[0]
     
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return None
+
 class OnesLikeOp(BaseOp):
     def __call__(self, node1):
         node = BaseOp.__call__(self)
@@ -156,13 +186,63 @@ class OnesLikeOp(BaseOp):
         node.desc = "ones like shape of (%s)" % node1.desc
         return node
     
-    def compute(self, node, vals):
-        return np.ones(vals[0].shape)
+    def compute(self, node, vals, output, compiled_func):
+        output.copyfrom(np.ones(vals[0].shape, dtype = vals[0].dtype))
     
     def gradient(self, node, grad):
         temp = ZerosLike()
         return [temp(node.inputs[0])]
-        
+
+    def infer_shape(self, node, shape):
+        return (1,)
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return None
+    
+class ReduceSumAxis(BaseOp):
+    def __call__(self, node1):
+        node = BaseOp.__call__(self)
+        node.inputs = [node1]
+        node.desc = "ReduceSumAxis (%s)" % (node1.desc)
+        return node
+
+    def compute(self, node, vals, output, compiled_func):
+        compiled_func(vals[0], output)
+    
+    def gradient(self, node, grad):
+        temp = BroadcastTo()
+        return [temp(grad, node.inputs[0])]
+
+    def infer_shape(self, node, shape):
+        if (len(shape[0]) == 1):
+            return (1,)
+        return shape[0][1:]
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.reduce_sum_axis_zero(shapes[0], "reduce_sum_over_axis")
+    
+class BroadcastTo(BaseOp):
+    def __call__(self, node1, node2):
+        node = BaseOp.__call__(self)
+        node.inputs = [node1, node2]
+        node.desc = "BroadcaseOp (%s, %s.shape)" % (node1.desc, node2.desc)
+        return node
+    
+    def compute(self, node, vals, output, compiled_func):
+        compiled_func(vals[0], output)
+    
+    def gradient(self, node, grad):
+        temp1 = ReduceSumAxis()
+        temp2 = ZerosLike()
+        grad_A = temp1(grad)
+        grad_B = temp2(node.inputs[1])
+        return [grad_A, grad_B]
+
+    def infer_shape(self, node, shape):
+        return broadcast_rule(shape[0], shape[1])
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.broadcast_to(shapes[0], shapes[1], "broadcast_op")
     
 class MatrixMultiply(BaseOp):
     def __call__(self, node1, node2, t_1 = False, t_2 = False):
@@ -173,14 +253,37 @@ class MatrixMultiply(BaseOp):
         node.transpose_2 = t_2
         return node
     
-    def compute(self, node, val):
-        if (node.transpose_1):
-            val[0] = val[0].T
-        if (node.transpose_2):
-            val[1] = val[1].T
-        return np.dot(val[0], val[1])
+    def compute(self, node, vals, output, compiled_func):
+        compiled_func(vals[0], vals[1], output)
     
     def gradient(self, node, grad):
-        temp = MatrixMultiply()
-        res = [temp(grad, node.inputs[1], False, True), temp(node.inputs[0], grad, True, False)]
-        return res
+        matmul_op = MatrixMultiply()
+        if ((node.transpose_1 is False) and (node.transpose_2 is False)):
+            lhs_grad = matmul_op(grad, node.inputs[1], False, True)
+            rhs_grad = matmul_op(node.inputs[0], grad, True, False)
+        elif ((node.transpose_1 is True) and (node.transpose_2 is False)):
+            lhs_grad = matmul_op(node.inputs[1], grad, False, True)
+            rhs_grad = matmul_op(node.inputs[0], grad, True, False)
+        elif ((node.transpose_1 is False) and (node.transpose_2 is True)):
+            lhs_grad = matmul_op(grad, node.inputs[1], False, True)
+            rhs_grad = matmul_op(grad, node.inputs[0], True, False)
+        elif ((node.transpose_1 is True) and (node.transpose_2 is True)):
+            lhs_grad = matmul_op(node.inputs[1], grad, False, True)
+            rhs_grad = matmul_op(grad, node.inputs[0], True, False)
+        return [lhs_grad, rhs_grad]
+    
+    def infer_shape(self, node, shape):
+        assert(len(shape[0]) == 2 and len(shape[1]) == 2)
+        l = shape[0]
+        r = shape[1]
+        if node.transpose_1:
+            l = (shape[0][1], shape[0][0])
+        if node.transpose_2:
+            r = (shape[1][1], shape[1][0])
+        assert(l[1] == r[0])
+        return (l[0], r[1])
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.matrix_multiply(shapes[0], node.transpose_1, shapes[1], node.transpose_2, "matrix_mult")
+    
+    
