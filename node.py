@@ -3,7 +3,7 @@ import numpy as np
 import tvm_op
 import topi
 
-from utils import broadcast_rule
+from utils import broadcast_rule, softmax_fn
 
 class Node:
    
@@ -198,7 +198,28 @@ class OnesLikeOp(BaseOp):
     
     def compiled_func(self, node, shapes, tgt, tgt_host):
         return None
+
+class SoftmaxOp(BaseOp):
+    def __call__(self, node1):
+        node = BaseOp.__call__(self)
+        node.inputs = [node1]
+        node.desc = "Softmax (%s)" % (node1.desc)
+        return node
     
+    def compute(self, node, vals, output, compiled_func):
+        compiled_func(vals[0], output)
+    
+    def gradient(self, node, grad):
+        pass
+
+    def infer_shape(self, node, shape):
+        return shape[0]
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.matrix_softmax(shapes[0], "matrix_softmax")
+   
+    
+
 class ReduceSumAxis(BaseOp):
     def __call__(self, node1):
         node = BaseOp.__call__(self)

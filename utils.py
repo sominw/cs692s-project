@@ -1,11 +1,18 @@
 from typing import List
 from operator import add
 from functools import reduce
+import numpy as np
 
 from node import Placeholder, OnesLikeOp
 
 def sum_nodes(nodes):
     return reduce(add, nodes)
+
+def softmax_fn(y):
+    x = y - np.max(y, axis=1, keepdims=True)
+    exp_x = np.exp(x)
+    softmax = exp_x / np.sum(exp_x, axis = 1, keepdims=True)
+    return softmax
 
 def var(desc):
     pn = Placeholder()
