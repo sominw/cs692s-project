@@ -46,7 +46,8 @@ def gradients(node, node_list):
         node_to_grad_[n] = grad
         input_grad = n.op.gradient(n, grad)
         for i in range(len(n.inputs)):
-            node_to_grad[n.inputs[i]] = node_to_grad.get(n.inputs[i], [])
+            if n.inputs[i] not in node_to_grad:
+                node_to_grad[n.inputs[i]] = list()
             node_to_grad[n.inputs[i]].append(input_grad[i])
     
     grad_list = [node_to_grad_[n] for n in node_list]

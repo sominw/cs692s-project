@@ -198,6 +198,45 @@ class OnesLikeOp(BaseOp):
     
     def compiled_func(self, node, shapes, tgt, tgt_host):
         return None
+    
+class ReluOp(BaseOp):
+    def __call__(self, node1):
+        node = BaseOp.__call__(self)
+        node.inputs = [node1]
+        node.desc = "ReLU (%s)" % (node1.desc)
+        return node
+    
+    def compute(self, node, vals, output, compiled_func):
+        compiled_func(vals[0], output)
+    
+    def gradient(self, node, grad):
+        temp = ReluGradient()
+        return [temp(node.inputs[0], grad)]
+
+    def infer_shape(self, node, shape):
+        return shape[0]
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.relu(shapes[0], "relu")    
+
+class ReluGradient(BaseOp):
+    def __call__(self, node1, node2):
+        node = BaseOp.__call__(self)
+        node.inputs = [node1, node2]
+        node.desc = "ReLU (%s)" % (node1.desc)
+        return node
+    
+    def compute(self, node, vals, output, compiled_func):
+        compiled_func(vals[0], vals[1], output)
+    
+    def gradient(self, node, grad):
+        pass
+
+    def infer_shape(self, node, shape):
+        return shape[0]
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.relu_grad(shapes[0], "relu_grad") 
 
 class SoftmaxOp(BaseOp):
     def __call__(self, node1):
@@ -217,7 +256,33 @@ class SoftmaxOp(BaseOp):
     
     def compiled_func(self, node, shapes, tgt, tgt_host):
         return tvm_op.matrix_softmax(shapes[0], "matrix_softmax")
-   
+    
+class SoftmaxCrossEntropy(BaseOp):
+    def __call__(self, node1, node2):
+        node = BaseOp.__call__(self)
+        node.inputs = [node1, node2]
+        node.desc = "SoftmaxEntropy (%s,%s)" % (node1.desc, node2.desc)
+        return node   
+
+    def compute(self, node, vals, output, compiled_func):
+        y = vals[0]
+        x = vals[1]
+        compiled_func(y, x, output)
+    
+    def gradient(self, node, grad):
+        temp = SoftmaxOp()
+        b_temp = BroadcastTo()
+        z_temp = ZerosLike()
+        temp_grad = temp(node.inputs[0]) + -1*node.inputs[1]
+        grad_A = temp_grad * b_temp(grad, temp_grad)
+        grad_B = z_temp(node.inputs[1])
+        return [grad_A, grad_B]
+
+    def infer_shape(self, node, shape):
+        return (1,)
+    
+    def compiled_func(self, node, shapes, tgt, tgt_host):
+        return tvm_op.matrix_cross_entropy(shapes[0], "matrix_softmax_cross_entropy")   
     
 
 class ReduceSumAxis(BaseOp):
