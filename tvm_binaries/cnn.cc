@@ -136,20 +136,14 @@ int main(int argc, char **argv)
     case SqueezeNet:
       graph = SqueezeNetComplex(model);
       break;
-    case Inception:
-      graph = InceptionV3(model);
+    case Resnet34:
+      graph = Resnet18(model);
       break;
     case Resnet34:
       graph = ResNet34(model);
       break;
     case Resnet50:
       graph = ResNet50(model);
-      break;
-    case DenseNet:
-      graph = DenseNet121(model);
-      break;
-    case RNNTC:
-      graph = RNNTC_SRU(model);
       break;
     default:
       assert(false);
