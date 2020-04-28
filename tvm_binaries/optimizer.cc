@@ -4,7 +4,7 @@
 #include "resnet.h"
 #include <cstring> 
 
-Graph* optimize_graph(Graph *graph, Model *model, float beta, int budget)
+Graph* optimize_graph(Graph *graph, Model *model, float beta)
 {
   std::vector<GraphXfer*> xfers;
   xfers.push_back(create_fuse_conv_batch_xfer(model));
@@ -38,9 +38,6 @@ Graph* optimize_graph(Graph *graph, Model *model, float beta, int budget)
     if (subGraph->total_cost() > beta * bestCost) {
       delete subGraph;
       continue;
-    }
-    if (counter > budget) {
-      break;
     }
 #ifdef VERBOSE
     if (counter % 100 == 0)
